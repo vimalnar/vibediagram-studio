@@ -4,3 +4,4 @@ dist
 *.tsbuildinfo
 exports
 playwright-report
+.venv
