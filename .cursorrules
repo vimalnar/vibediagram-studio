@@ -1,0 +1,11 @@
+You are editing an educational animation framework project.
+
+Rules:
+- New scenes must be single-file implementations: src/implementations/<id>.impl.tsx
+- Never create implementation subfolders under src/implementations/
+- Prefer running: npm run new:implementation -- --id <id> --title "<Title>"
+- Keep metadata + stage narrative + camera + timeline + visuals in one file
+- Preserve white canvas mode and readable labels
+- Keep compatibility with toolbar controls and recording
+- After changes, run npm run lint && npm run build
+
