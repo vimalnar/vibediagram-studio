@@ -26,56 +26,139 @@ type StarterConfig = {
   timelineDurationMs: number;
 };
 
-type FlowNodeSpec = {
+type PlanetSpec = {
   label: string;
   color: string;
-  y: number;
-  z: number;
+  orbitRadius: number;
+  size: number;
+  orbitalDays: number;
+  startAngle: number;
+  orbitColor: string;
 };
 
-const FLOW_NODES: FlowNodeSpec[] = [
-  { label: "A", color: "#5aa9ff", y: 1.65, z: -0.75 },
-  { label: "B", color: "#2fd4a8", y: 0.55, z: -0.25 },
-  { label: "C", color: "#ff9951", y: -0.55, z: 0.25 },
-  { label: "D", color: "#b48cf5", y: -1.65, z: 0.75 },
+const PLANETS: PlanetSpec[] = [
+  {
+    label: "Mercury",
+    color: "#c9b6a5",
+    orbitRadius: 1.45,
+    size: 0.12,
+    orbitalDays: 88,
+    startAngle: 0.2,
+    orbitColor: "#d9d4cf",
+  },
+  {
+    label: "Venus",
+    color: "#e6c27a",
+    orbitRadius: 1.95,
+    size: 0.18,
+    orbitalDays: 225,
+    startAngle: 1.15,
+    orbitColor: "#e4dccf",
+  },
+  {
+    label: "Earth",
+    color: "#4c9dff",
+    orbitRadius: 2.55,
+    size: 0.2,
+    orbitalDays: 365,
+    startAngle: 2.2,
+    orbitColor: "#9fc6eb",
+  },
+  {
+    label: "Mars",
+    color: "#d98663",
+    orbitRadius: 3.15,
+    size: 0.15,
+    orbitalDays: 687,
+    startAngle: 2.95,
+    orbitColor: "#e8d4cc",
+  },
+  {
+    label: "Jupiter",
+    color: "#d9b487",
+    orbitRadius: 4.25,
+    size: 0.42,
+    orbitalDays: 4333,
+    startAngle: 0.55,
+    orbitColor: "#e3ddd6",
+  },
+  {
+    label: "Saturn",
+    color: "#e2cf9f",
+    orbitRadius: 5.2,
+    size: 0.36,
+    orbitalDays: 10759,
+    startAngle: 1.45,
+    orbitColor: "#e5e0d9",
+  },
+  {
+    label: "Uranus",
+    color: "#9fd7de",
+    orbitRadius: 6.1,
+    size: 0.28,
+    orbitalDays: 30687,
+    startAngle: 3.4,
+    orbitColor: "#dde8ea",
+  },
+  {
+    label: "Neptune",
+    color: "#648dff",
+    orbitRadius: 6.95,
+    size: 0.27,
+    orbitalDays: 60190,
+    startAngle: 4.65,
+    orbitColor: "#dbe0ea",
+  },
+];
+
+const STAGE_NOTES: string[] = [
+  "The Sun sits at the center while every planet follows its own orbit. Sizes and distances are compressed to fit the whole family into one clean view.",
+  "The inner planets move fastest. Mercury races around the Sun, while the big outer planets only creep forward during the same year.",
+  "Watch the small white marker on Earth: one full spin is one day, so the Earth-day timer cycles through 24 hours.",
+  "Earth needs about 365 days to go once around the Sun. The year timer tracks that trip across the full loop.",
+  "The Moon keeps circling Earth while Earth circles the Sun, showing that a day, a month, and a year all happen on different clocks.",
 ];
 
 const starterConfig: StarterConfig = {
   metadata: {
-    title: "Starter Implementation Template",
-    description: "Self-contained one-file template for new educational scenes.",
+    title: "Solar System Day and Year",
+    description:
+      "Kid-friendly solar system explainer showing the planets orbiting the Sun, the Moon orbiting Earth, and live Earth day and year timers.",
     intro: [
-      "Use this file as the baseline when generating a new implementation with an AI editor.",
-      "Everything is intentionally local to this file: metadata, camera, timing, scene logic, labels, and visuals.",
+      "This starter scene turns the default template into a simple solar-system model your kids can watch over time.",
+      "Earth's spin shows a 24-hour day, Earth's orbit around the Sun shows a 365-day year, and the Moon circles Earth the whole way through.",
     ],
-    tip: "Tip: shape stage sequence first, then tune camera and label clarity.",
+    tip: "Pause around Earth to compare the 24-hour day spinner with the 365-day trip around the Sun.",
     stages: [
-      { panelLabel: "Inputs", sceneLabel: "Step 1: Present the starting state" },
       {
-        panelLabel: "Transform setup",
-        sceneLabel: "Step 2: Activate the transformation stage",
+        panelLabel: "Sun and planets",
+        sceneLabel: "Step 1: The Sun anchors the solar system at the center",
       },
       {
-        panelLabel: "Flow dynamics",
-        sceneLabel: "Step 3: Motion paths reveal intermediate behavior",
+        panelLabel: "Inner planets",
+        sceneLabel: "Step 2: The inner planets sweep around the Sun the fastest",
       },
       {
-        panelLabel: "Output shaping",
-        sceneLabel: "Step 4: Merge transformed state into outputs",
+        panelLabel: "Earth day",
+        sceneLabel: "Step 3: Earth spins once every 24 hours",
       },
       {
-        panelLabel: "Final state",
-        sceneLabel: "Step 5: Highlight the resulting pattern",
+        panelLabel: "Earth year",
+        sceneLabel: "Step 4: Earth needs about 365 days to orbit the Sun",
+      },
+      {
+        panelLabel: "Moon motion",
+        sceneLabel: "Step 5: The Moon keeps circling Earth during the whole year",
       },
     ],
   },
   camera: {
     azimuth: 1.57,
-    elevation: 0.14,
-    distance: 12.4,
-    target: [0.2, -0.2, 0],
+    elevation: 0.42,
+    distance: 16.2,
+    target: [0, 0.2, 0],
   },
-  timelineDurationMs: 20_000,
+  timelineDurationMs: 48_000,
 };
 
 const smoothWindow = (value: number, start: number, end: number): number => {
@@ -89,15 +172,11 @@ const smoothWindow = (value: number, start: number, end: number): number => {
   return t * t * (3 - 2 * t);
 };
 
-const lerp = (start: number, end: number, alpha: number): number => {
-  return start + (end - start) * alpha;
-};
-
 function SceneLabel({
   text,
   position,
   size = 15,
-  color = "#15243b",
+  color = "#183049",
 }: {
   text: string;
   position: [number, number, number];
@@ -118,8 +197,8 @@ function SceneLabel({
         fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif",
         pointerEvents: "none",
         textShadow:
-          "0 0 1px rgba(255,255,255,0.76), 0 1px 1px rgba(255,255,255,0.56)",
-        WebkitTextStroke: "0.1px rgba(255,255,255,0.5)",
+          "0 0 1px rgba(255,255,255,0.82), 0 1px 1px rgba(255,255,255,0.62)",
+        WebkitTextStroke: "0.12px rgba(255,255,255,0.5)",
       }}
     >
       {text}
@@ -127,14 +206,56 @@ function SceneLabel({
   );
 }
 
+function InfoCard({
+  title,
+  lines,
+  position,
+}: {
+  title: string;
+  lines: string[];
+  position: [number, number, number];
+}) {
+  return (
+    <Html
+      transform
+      center
+      position={position}
+      distanceFactor={10}
+      style={{
+        width: "220px",
+        padding: "12px 14px",
+        borderRadius: "14px",
+        border: "1px solid rgba(162, 176, 193, 0.4)",
+        background: "rgba(255, 255, 255, 0.86)",
+        color: "#2f4358",
+        fontSize: "12px",
+        fontWeight: 600,
+        lineHeight: 1.35,
+        textAlign: "left",
+        fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif",
+        pointerEvents: "none",
+        boxShadow: "0 10px 24px rgba(98, 115, 131, 0.12)",
+        backdropFilter: "blur(6px)",
+      }}
+    >
+      <div style={{ fontSize: "13px", fontWeight: 800, marginBottom: "6px" }}>
+        {title}
+      </div>
+      {lines.map((line) => (
+        <div key={line}>{line}</div>
+      ))}
+    </Html>
+  );
+}
+
 const StarterScene: ImplementationDefinition["Scene"] = ({
   sheet,
-  forcedPhase,
-  isPlaying,
-  manualCamera,
-  zoomLevel,
-  loop,
-  resetToken,
+  forcedPhase = null,
+  isPlaying = true,
+  manualCamera = false,
+  zoomLevel = 1,
+  loop = true,
+  resetToken = 0,
   onPlaybackComplete,
   onStageChange,
 }) => {
@@ -142,15 +263,25 @@ const StarterScene: ImplementationDefinition["Scene"] = ({
   const [{ phase }, phaseApi] = useSpring(() => ({ phase: 0 }));
   const [activeStage, setActiveStage] = useState(0);
   const activeStageRef = useRef(0);
-  const nodeRefs = useRef<Array<Mesh | null>>([]);
-  const haloRef = useRef<Mesh>(null);
+  const [earthDay, setEarthDay] = useState(1);
+  const [earthHour, setEarthHour] = useState(0);
+  const earthDayRef = useRef(1);
+  const earthHourRef = useRef(0);
+  const planetRefs = useRef<Array<Mesh | null>>([]);
+  const sunRef = useRef<Mesh>(null);
+  const sunHaloRef = useRef<Mesh>(null);
+  const earthMarkerRef = useRef<Mesh>(null);
+  const moonRef = useRef<Mesh>(null);
+  const saturnRingRef = useRef<Mesh>(null);
   const maxStageIndex = Math.max(0, starterConfig.metadata.stages.length - 1);
 
   useEffect(() => {
     if (typeof forcedPhase === "number" && Number.isFinite(forcedPhase)) {
       phaseApi.stop();
       phase.pause();
-      phase.set(Math.min(starterConfig.metadata.stages.length, Math.max(0, forcedPhase)));
+      phase.set(
+        Math.min(starterConfig.metadata.stages.length, Math.max(0, forcedPhase)),
+      );
       return;
     }
 
@@ -170,14 +301,7 @@ const StarterScene: ImplementationDefinition["Scene"] = ({
     return () => {
       phaseApi.stop();
     };
-  }, [
-    forcedPhase,
-    loop,
-    onPlaybackComplete,
-    phase,
-    phaseApi,
-    resetToken,
-  ]);
+  }, [forcedPhase, loop, onPlaybackComplete, phase, phaseApi, resetToken]);
 
   useEffect(() => {
     if (typeof forcedPhase === "number" && Number.isFinite(forcedPhase)) {
@@ -218,108 +342,229 @@ const StarterScene: ImplementationDefinition["Scene"] = ({
       onStageChange?.(stage);
     }
 
-    const toCore = smoothWindow(currentPhase, 0.8, 2.2);
-    const toOutput = smoothWindow(currentPhase, 2.6, 4.6);
-    const pathBend = smoothWindow(currentPhase, 2.1, 3.3);
-    const settlePulse = smoothWindow(currentPhase, 4.1, 5);
+    const stageCount = starterConfig.metadata.stages.length;
+    const progress = Math.min(1, Math.max(0, currentPhase / stageCount));
+    const simulatedDays = progress * 365;
+    const simulatedHours = simulatedDays * 24;
+    const nextDay = Math.min(365, Math.floor(simulatedDays) + 1);
+    const nextHour = Math.floor(simulatedHours % 24);
 
-    FLOW_NODES.forEach((node, index) => {
-      const mesh = nodeRefs.current[index];
+    if (earthDayRef.current !== nextDay) {
+      earthDayRef.current = nextDay;
+      setEarthDay(nextDay);
+    }
+    if (earthHourRef.current !== nextHour) {
+      earthHourRef.current = nextHour;
+      setEarthHour(nextHour);
+    }
+
+    const sun = sunRef.current;
+    if (sun) {
+      const pulse = 1 + Math.sin(elapsed * 1.3) * 0.04;
+      sun.scale.setScalar(pulse);
+    }
+
+    const sunHalo = sunHaloRef.current;
+    if (sunHalo) {
+      sunHalo.rotation.z += delta * 0.1;
+      const haloScale = 1 + smoothWindow(currentPhase, 0.5, 2.5) * 0.08;
+      sunHalo.scale.setScalar(haloScale);
+    }
+
+    PLANETS.forEach((planet, index) => {
+      const mesh = planetRefs.current[index];
       if (!mesh) {
         return;
       }
-      const baseX = lerp(-4.8, 0.2, toCore);
-      const flowX = lerp(baseX, 4.8, toOutput);
-      const wobble = Math.sin(elapsed * 1.8 + index * 0.9) * 0.24 * pathBend;
-      const zLift = Math.cos(elapsed * 1.4 + index * 0.7) * 0.16 * pathBend;
-      mesh.position.set(flowX, node.y + wobble, node.z + zLift);
 
-      const pulse = 1 + settlePulse * 0.2 * Math.sin(elapsed * 5 + index);
-      mesh.scale.setScalar(0.95 * pulse);
+      const orbitAngle =
+        planet.startAngle + (simulatedDays / planet.orbitalDays) * Math.PI * 2;
+      const x = Math.cos(orbitAngle) * planet.orbitRadius;
+      const z = Math.sin(orbitAngle) * planet.orbitRadius;
+      mesh.position.set(x, 0.08, z);
+      mesh.rotation.y += delta * (0.3 + 0.08 * index);
+
+      if (planet.label === "Earth") {
+        mesh.rotation.y = (simulatedHours / 24) * Math.PI * 2;
+      }
     });
 
-    const halo = haloRef.current;
-    if (halo) {
-      halo.rotation.z += delta * 0.32;
-      halo.scale.setScalar(1 + settlePulse * 0.22);
+    const earth = planetRefs.current[2];
+    const moon = moonRef.current;
+    if (earth && moon) {
+      const moonAngle = (simulatedDays / 27.3) * Math.PI * 2 + 0.9;
+      moon.position.set(
+        earth.position.x + Math.cos(moonAngle) * 0.52,
+        0.08,
+        earth.position.z + Math.sin(moonAngle) * 0.52,
+      );
+    }
+
+    const earthMarker = earthMarkerRef.current;
+    if (earthMarker) {
+      earthMarker.rotation.x += delta * 2.8;
+    }
+
+    const saturnRing = saturnRingRef.current;
+    if (saturnRing) {
+      saturnRing.rotation.z += delta * 0.18;
     }
   });
 
-  const blockOpacity = phase.to(
-    (value) => 0.18 + smoothWindow(value, 0.4, 2.2) * 0.28,
+  const orbitOpacity = phase.to(
+    (value) => 0.16 + smoothWindow(value, 0.15, 1.2) * 0.2,
   );
-  const nodeOpacity = phase.to((value) => 0.25 + smoothWindow(value, 0.2, 1.4) * 0.75);
-  const connectorOpacity = phase.to(
-    (value) => 0.1 + smoothWindow(value, 1.3, 3.8) * 0.45,
+  const outerOrbitOpacity = phase.to(
+    (value) => 0.06 + smoothWindow(value, 0.9, 2.2) * 0.18,
   );
-  const outputGlowOpacity = phase.to(
-    (value) => 0.08 + smoothWindow(value, 3.6, 5) * 0.66,
+  const timerOpacity = phase.to(
+    (value) => 0.18 + smoothWindow(value, 2.0, 3.2) * 0.76,
+  );
+  const moonOpacity = phase.to(
+    (value) => 0.18 + smoothWindow(value, 3.5, 4.6) * 0.72,
+  );
+  const yearArcOpacity = phase.to(
+    (value) => 0.1 + smoothWindow(value, 2.6, 4.1) * 0.3,
   );
 
   return (
     <group>
       <SceneLabel
         text={starterConfig.metadata.stages[activeStage]?.sceneLabel ?? ""}
-        position={[0, 4.55, 0]}
+        position={[0, 5.25, 0]}
         size={17}
-      />
-      <SceneLabel text="Input" position={[-4.8, 2.85, 0]} size={14} color="#2f6fb3" />
-      <SceneLabel text="Transform" position={[0.2, 2.85, 0]} size={14} color="#1f9c63" />
-      <SceneLabel text="Output" position={[4.8, 2.85, 0]} size={14} color="#8b4f64" />
-      <SceneLabel
-        text="Template scene: replace geometry and stage logic for any topic"
-        position={[0, -4.9, 0]}
-        size={13}
-        color="#6f627f"
+        color="#14304b"
       />
 
-      <a.mesh position={[-4.8, 0, 0]}>
-        <boxGeometry args={[1.8, 4.8, 2.4]} />
-        <a.meshStandardMaterial color="#8bb7e5" transparent opacity={blockOpacity} />
-      </a.mesh>
-      <a.mesh position={[0.2, 0, 0]}>
-        <boxGeometry args={[1.9, 4.8, 2.6]} />
-        <a.meshStandardMaterial color="#8fd5b9" transparent opacity={blockOpacity} />
-      </a.mesh>
-      <a.mesh position={[4.8, 0, 0]}>
-        <boxGeometry args={[1.8, 4.8, 2.4]} />
-        <a.meshStandardMaterial
-          color="#d5aac1"
-          emissive="#d9a8c1"
-          emissiveIntensity={outputGlowOpacity.to((value) => 0.08 + value * 0.4)}
-          transparent
-          opacity={blockOpacity}
-        />
-      </a.mesh>
+      <InfoCard
+        title="Earth Rotation"
+        lines={[
+          `Hour ${earthHour.toString().padStart(2, "0")} of 24`,
+          "One full spin = one Earth day",
+        ]}
+        position={[-8.1, 3.6, 0]}
+      />
+      <InfoCard
+        title="Earth Orbit"
+        lines={[`Day ${earthDay} of 365`, "One full trip = one Earth year"]}
+        position={[8.1, 3.6, 0]}
+      />
+      <InfoCard
+        title="Moon Orbit"
+        lines={["About 27 days around Earth", "It loops many times during one year"]}
+        position={[8.25, -3.15, 0]}
+      />
 
-      {FLOW_NODES.map((node, index) => (
+      <Html
+        transform
+        center
+        position={[0, -5.35, 0]}
+        distanceFactor={10}
+        style={{
+          width: "500px",
+          padding: "12px 16px",
+          borderRadius: "14px",
+          border: "1px solid rgba(162, 176, 193, 0.36)",
+          background: "rgba(255, 255, 255, 0.88)",
+          color: "#31455d",
+          fontSize: "13px",
+          fontWeight: 600,
+          lineHeight: 1.34,
+          textAlign: "center",
+          fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif",
+          pointerEvents: "none",
+          boxShadow: "0 10px 26px rgba(98, 115, 131, 0.12)",
+          backdropFilter: "blur(6px)",
+        }}
+      >
+        {STAGE_NOTES[activeStage] ?? STAGE_NOTES[0]}
+      </Html>
+
+      <mesh position={[0, -0.65, 0]} rotation-x={-Math.PI / 2}>
+        <circleGeometry args={[8.35, 64]} />
+        <meshBasicMaterial color="#f4f7fa" transparent opacity={0.92} />
+      </mesh>
+
+      {PLANETS.map((planet, index) => (
         <a.mesh
-          key={node.label}
-          ref={(mesh) => {
-            nodeRefs.current[index] = mesh;
-          }}
+          key={`orbit-${planet.label}`}
+          position={[0, 0.02, 0]}
+          rotation-x={Math.PI / 2}
         >
-          <sphereGeometry args={[0.24, 24, 24]} />
-          <a.meshStandardMaterial
-            color={node.color}
-            emissive={node.color}
-            emissiveIntensity={0.35}
+          <torusGeometry args={[planet.orbitRadius, 0.012, 8, 120]} />
+          <a.meshBasicMaterial
+            color={planet.orbitColor}
             transparent
-            opacity={nodeOpacity}
+            opacity={index >= 4 ? outerOrbitOpacity : orbitOpacity}
           />
         </a.mesh>
       ))}
 
-      {FLOW_NODES.map((node) => (
-        <a.mesh key={`path-${node.label}`} position={[0, node.y, node.z]}>
-          <boxGeometry args={[9.1, 0.04, 0.04]} />
-          <a.meshBasicMaterial color="#7a8798" transparent opacity={connectorOpacity} />
-        </a.mesh>
+      <a.mesh ref={sunHaloRef} position={[0, 0.08, 0]} rotation-x={Math.PI / 2}>
+        <torusGeometry args={[0.95, 0.08, 16, 96]} />
+        <a.meshBasicMaterial color="#ffd37b" transparent opacity={yearArcOpacity} />
+      </a.mesh>
+
+      <mesh ref={sunRef} position={[0, 0.08, 0]}>
+        <sphereGeometry args={[0.7, 42, 42]} />
+        <meshStandardMaterial
+          color="#f6bf4b"
+          emissive="#ffce66"
+          emissiveIntensity={0.55}
+        />
+        <SceneLabel text="Sun" position={[0, 1.0, 0]} size={13} color="#8c5a12" />
+      </mesh>
+
+      {PLANETS.map((planet, index) => (
+        <mesh
+          key={planet.label}
+          ref={(mesh) => {
+            planetRefs.current[index] = mesh;
+          }}
+          position={[planet.orbitRadius, 0.08, 0]}
+        >
+          <sphereGeometry args={[planet.size, 28, 28]} />
+          <meshStandardMaterial
+            color={planet.color}
+            emissive={planet.color}
+            emissiveIntensity={planet.label === "Earth" ? 0.18 : 0.08}
+          />
+          {planet.label === "Earth" ? (
+            <mesh ref={earthMarkerRef} position={[planet.size * 1.15, 0.03, 0]}>
+              <sphereGeometry args={[0.045, 14, 14]} />
+              <meshStandardMaterial color="#f8fbff" emissive="#f8fbff" emissiveIntensity={0.2} />
+            </mesh>
+          ) : null}
+          {planet.label === "Saturn" ? (
+            <mesh ref={saturnRingRef} rotation-x={Math.PI / 2.6}>
+              <torusGeometry args={[planet.size * 1.6, 0.025, 12, 48]} />
+              <meshBasicMaterial color="#e0c994" transparent opacity={0.72} />
+            </mesh>
+          ) : null}
+          <SceneLabel
+            text={planet.label}
+            position={[0, planet.size + 0.34, 0]}
+            size={11}
+            color={planet.label === "Earth" ? "#20578f" : "#51657c"}
+          />
+        </mesh>
       ))}
 
-      <a.mesh ref={haloRef} position={[4.8, 0, 0]} rotation-x={Math.PI / 2}>
-        <torusGeometry args={[1.55, 0.06, 20, 96]} />
-        <a.meshBasicMaterial color="#c75f83" transparent opacity={outputGlowOpacity} />
+      <a.mesh ref={moonRef} position={[3.05, 0.08, 0.2]}>
+        <sphereGeometry args={[0.075, 18, 18]} />
+        <a.meshStandardMaterial
+          color="#d8dde5"
+          emissive="#d8dde5"
+          emissiveIntensity={0.08}
+          transparent
+          opacity={moonOpacity}
+        />
+        <SceneLabel text="Moon" position={[0, 0.22, 0]} size={10} color="#68788b" />
+      </a.mesh>
+
+      <a.mesh position={[0, 0.01, 0]} rotation-x={Math.PI / 2}>
+        <torusGeometry args={[2.55, 0.028, 12, 96]} />
+        <a.meshBasicMaterial color="#6caee3" transparent opacity={timerOpacity} />
       </a.mesh>
     </group>
   );

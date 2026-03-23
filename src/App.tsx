@@ -30,6 +30,13 @@ const CAMERA_MAX_POLAR = Math.PI - 0.06;
 const PITCH_STEP = 0.08;
 const ZOOM_DOLLY_FACTOR = 1.15;
 
+type BrowserTabCaptureOptions = DisplayMediaStreamOptions & {
+  preferCurrentTab?: boolean;
+  selfBrowserSurface?: "include" | "exclude";
+  surfaceSwitching?: "include" | "exclude";
+  monitorTypeSurfaces?: "include" | "exclude";
+};
+
 const pickMp4RecordingMimeType = (): string => {
   if (typeof MediaRecorder === "undefined") {
     return "";
@@ -95,7 +102,6 @@ function App() {
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [isPitchLocked, setIsPitchLocked] = useState(false);
   const [lockedPolarAngle, setLockedPolarAngle] = useState<number | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const cameraRef = useRef<Camera | null>(null);
   const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
   const isRecordingRef = useRef(false);
@@ -146,6 +152,10 @@ function App() {
   }, [implementation.metadata.stages.length]);
 
   useEffect(() => {
+    document.title = implementation.metadata.title;
+  }, [implementation.metadata.title]);
+
+  useEffect(() => {
     return () => {
       const currentRecording = recordingRef.current;
       if (!currentRecording) {
@@ -187,6 +197,13 @@ function App() {
     [],
   );
 
+  const togglePlayback = useCallback(() => {
+    setRecordingError(null);
+    setForcedPhase(null);
+    setLoopPlayback(true);
+    setIsPlaying((current) => !current);
+  }, []);
+
   const stopRecordingSession = useCallback(() => {
     const currentRecording = recordingRef.current;
     if (!currentRecording) {
@@ -212,13 +229,6 @@ function App() {
     stopRecordingSession();
   }, [stopRecordingSession]);
 
-  const togglePlayback = useCallback(() => {
-    setRecordingError(null);
-    setForcedPhase(null);
-    setLoopPlayback(true);
-    setIsPlaying((current) => !current);
-  }, []);
-
   const startRecording = useCallback(async () => {
     if (isPreparingRecording || isRecording) {
       return;
@@ -229,8 +239,12 @@ function App() {
     }
     const mp4MimeType = pickMp4RecordingMimeType();
     if (!mp4MimeType) {
+      setRecordingError("MP4 recording is not supported in this browser.");
+      return;
+    }
+    if (!navigator.mediaDevices?.getDisplayMedia) {
       setRecordingError(
-        "MP4/MPEG-4 recording is not supported in this browser. Use `npm run export:video` for guaranteed 1080p MP4 output.",
+        "Browser tab capture is not available in this browser.",
       );
       return;
     }
@@ -248,24 +262,20 @@ function App() {
     });
 
     try {
-      let stream: MediaStream | null = null;
-      if (canvasRef.current?.captureStream) {
-        // Prefer canvas-only recording so exported footage excludes browser UI.
-        stream = canvasRef.current.captureStream(RECORD_FPS);
-      } else if (navigator.mediaDevices?.getDisplayMedia) {
-        stream = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            frameRate: RECORD_FPS,
-            width: { ideal: RECORD_WIDTH },
-            height: { ideal: RECORD_HEIGHT },
-          },
-          audio: false,
-        });
-      }
-
-      if (!stream) {
-        throw new Error("Could not access a video capture stream.");
-      }
+      const displayMediaOptions: BrowserTabCaptureOptions = {
+        preferCurrentTab: true,
+        selfBrowserSurface: "include",
+        surfaceSwitching: "include",
+        monitorTypeSurfaces: "include",
+        video: {
+          frameRate: RECORD_FPS,
+          width: { ideal: RECORD_WIDTH },
+          height: { ideal: RECORD_HEIGHT },
+        },
+        audio: false,
+      };
+      const stream =
+        await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
 
       const recorder = new MediaRecorder(stream, {
         mimeType: mp4MimeType,
@@ -443,6 +453,8 @@ function App() {
     !isRecording &&
     !isPreparingRecording &&
     !recordingMode;
+  const canvasBackgroundColor =
+    implementation.metadata.id === "blackhole-gravity" ? "#000000" : "#ffffff";
   const introParagraphs =
     implementation.metadata.intro &&
     implementation.metadata.intro.length > 0
@@ -457,11 +469,11 @@ function App() {
           dpr={isLowPerf ? 1 : [1, 2]}
           performance={{ min: 0.5 }}
           onCreated={({ gl, camera }) => {
-            canvasRef.current = gl.domElement;
+            void gl;
             cameraRef.current = camera;
           }}
         >
-          <color attach="background" args={["#ffffff"]} />
+          <color attach="background" args={[canvasBackgroundColor]} />
           <ambientLight intensity={0.6} />
           <directionalLight position={[8, 8, 4]} intensity={1.2} />
           <directionalLight position={[-6, 3, -4]} intensity={0.45} />

@@ -17,6 +17,11 @@ describe("resolveImplementation", () => {
     expect(implementation.metadata.id).toBe("blackhole-gravity");
   });
 
+  it("returns entropy implementation when requested", () => {
+    const implementation = resolveImplementation("entropy-free-energy");
+    expect(implementation.metadata.id).toBe("entropy-free-energy");
+  });
+
   it("falls back to transformer when id is unknown", () => {
     const implementation = resolveImplementation("unknown-impl");
     expect(implementation.metadata.id).toBe("transformer");

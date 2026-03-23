@@ -2,11 +2,13 @@ import { ImplementationDefinition } from "../template/implementation";
 import { blackholeImplementation } from "./blackhole-gravity.impl";
 import { starterImplementation } from "./starter.impl";
 import { transformerImplementation } from "./transformer.impl";
+import { entropyFreeEnergyImplementation } from "./entropy-free-energy.impl";
 
 const implementations: Record<string, ImplementationDefinition> = {
   transformer: transformerImplementation,
   "blackhole-gravity": blackholeImplementation,
   starter: starterImplementation,
+  "entropy-free-energy": entropyFreeEnergyImplementation,
 };
 
 export const listImplementations = (): Array<{

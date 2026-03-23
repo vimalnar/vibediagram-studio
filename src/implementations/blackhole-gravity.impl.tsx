@@ -1,9 +1,16 @@
 /* eslint-disable react-refresh/only-export-components */
-import { Html, Trail } from "@react-three/drei";
+import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { a, useSpring } from "@react-spring/three";
-import { useEffect, useRef, useState } from "react";
-import { BufferAttribute, Mesh, Vector3 } from "three";
+import { useEffect, useMemo, useRef } from "react";
+import {
+  AdditiveBlending,
+  BufferAttribute,
+  Color,
+  Mesh,
+  Points,
+  Vector3,
+} from "three";
 import { ImplementationDefinition } from "../template/implementation";
 
 type BlackHoleImplementationConfig = {
@@ -26,36 +33,39 @@ type BlackHoleImplementationConfig = {
   timelineDurationMs: number;
 };
 
-type OrbiterSpec = {
-  color: string;
-  radius: number;
-  speed: number;
-  offset: number;
-  infallBias: number;
+type BackgroundDotField = {
+  positions: Float32Array;
+  basePositions: Float32Array;
+  colors: Float32Array;
+  seeds: Float32Array;
 };
 
-type CurvatureBandSpec = {
-  radius: number;
-  tube: number;
-  color: string;
-  baseY: number;
+type AccretionDotField = {
+  positions: Float32Array;
+  colors: Float32Array;
+  angles: Float32Array;
+  radii: Float32Array;
+  speeds: Float32Array;
+  offsets: Float32Array;
 };
 
-const ORBITER_SPECS: OrbiterSpec[] = [
-  { color: "#3478b4", radius: 5.3, speed: 0.85, offset: 0.1, infallBias: 0.05 },
-  { color: "#3aa593", radius: 4.7, speed: 1.02, offset: 1.2, infallBias: 0.11 },
-  { color: "#b78654", radius: 4.1, speed: 1.23, offset: 2.1, infallBias: 0.18 },
-  { color: "#7f6bb1", radius: 3.6, speed: 1.42, offset: 2.9, infallBias: 0.24 },
-  { color: "#c04e4e", radius: 3.1, speed: 1.64, offset: 3.6, infallBias: 0.32 },
-];
+type HorizonDotField = {
+  positions: Float32Array;
+  colors: Float32Array;
+  angles: Float32Array;
+  speeds: Float32Array;
+  offsets: Float32Array;
+};
 
-const CURVATURE_BANDS: CurvatureBandSpec[] = [
-  { radius: 4.9, tube: 0.026, color: "#8ab4d8", baseY: -0.23 },
-  { radius: 4.0, tube: 0.029, color: "#6aa3cd", baseY: -0.3 },
-  { radius: 3.2, tube: 0.032, color: "#4f8ebd", baseY: -0.4 },
-  { radius: 2.45, tube: 0.036, color: "#3d78a8", baseY: -0.56 },
-  { radius: 1.88, tube: 0.04, color: "#2d5f8d", baseY: -0.74 },
-];
+const TAU = Math.PI * 2;
+const BACKGROUND_DOT_COUNT = 5200;
+const MIDPLANE_DOT_COUNT = 18000;
+const UPPER_LENS_DOT_COUNT = 14000;
+const LOWER_LENS_DOT_COUNT = 8000;
+const HORIZON_DOT_COUNT = 520;
+const HOLE_X = 0.55;
+const HOLE_Y = -0.02;
+const HORIZON_RADIUS = 1.56;
 
 const smoothWindow = (value: number, start: number, end: number): number => {
   if (value <= start) {
@@ -68,10 +78,17 @@ const smoothWindow = (value: number, start: number, end: number): number => {
   return t * t * (3 - 2 * t);
 };
 
+const fract = (value: number): number => value - Math.floor(value);
+
+const hash = (seed: number): number =>
+  fract(Math.sin(seed * 12.9898) * 43758.5453123);
+
+const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
+
 function SceneLabel({
   text,
   position,
-  color = "#142033",
+  color = "#faf1d6",
   size = 16,
   align = "center",
 }: {
@@ -96,8 +113,7 @@ function SceneLabel({
         textAlign: align,
         pointerEvents: "none",
         textShadow:
-          "0 0 1px rgba(255,255,255,0.72), 0 1px 1px rgba(255,255,255,0.45)",
-        WebkitTextStroke: "0.1px rgba(255,255,255,0.5)",
+          "0 0 1px rgba(11,11,11,0.86), 0 1px 2px rgba(11,11,11,0.72)",
       }}
     >
       {text}
@@ -107,44 +123,140 @@ function SceneLabel({
 
 const blackHoleConfig: BlackHoleImplementationConfig = {
   metadata: {
-    title: "Black Hole Gravity in 3D",
+    title: "Black Hole Accretion and Horizon",
     description:
-      "Interactive scene showing how spacetime curvature changes motion around a black hole.",
+      "Particle-based black hole scene showing a dark shadow, lensed accretion bands, and moving dots tracing the horizon boundary.",
     intro: [
-      "This implementation builds an intuitive gravity-well model: the grid bends as curvature increases, contour bands visualize stronger spacetime curvature toward the center, and orbiting tracers show stable vs unstable paths.",
-      "The animation is intentionally simplified for education: it focuses on visual intuition over full general-relativistic equations, while still preserving the core ideas of curvature, orbit stability, and infall.",
+      "This version is shaped more like the familiar black-hole visual: a dark central shadow, a bright equatorial accretion band, and a lensed upper and lower image of that same disk.",
+      "Dots still carry the motion. The accretion bands flow around the hole, and a thinner dotted rim marks the horizon boundary so you can see where the no-return region sits relative to the glowing disk.",
     ],
-    tip: "Use the scene switcher to jump between examples, and use zoom before recording if you want a tighter shot.",
+    tip: "The dark shadow should cut through the center while the upper and lower arcs taper back into the disk at the sides.",
     stages: [
       {
-        panelLabel: "Flat spacetime reference",
-        sceneLabel: "Step 1: Start from an unwarped spacetime grid",
+        panelLabel: "Shadow appears",
+        sceneLabel: "Step 1: A dark black-hole shadow forms in the star field",
       },
       {
-        panelLabel: "Mass curves spacetime",
-        sceneLabel: "Step 2: Gravity well deepens near the black hole",
+        panelLabel: "Disk forms",
+        sceneLabel: "Step 2: A thin accretion disk brightens across the middle",
       },
       {
-        panelLabel: "Stable outer orbits",
-        sceneLabel: "Step 3: Particles orbit safely farther away",
+        panelLabel: "Upper lens image",
+        sceneLabel: "Step 3: The far side of the disk is lensed into an upper arc",
       },
       {
-        panelLabel: "Near-horizon effects",
-        sceneLabel: "Step 4: Event horizon region shows steep curvature",
+        panelLabel: "Lower lens image",
+        sceneLabel: "Step 4: A smaller lower arc appears beneath the shadow",
       },
       {
-        panelLabel: "Infall dominates",
-        sceneLabel: "Step 5: Strong curvature drives inward capture",
+        panelLabel: "Horizon motion",
+        sceneLabel: "Step 5: Dots skim the horizon while the disk keeps orbiting",
       },
     ],
   },
   camera: {
-    azimuth: 1.57,
-    elevation: 0.36,
-    distance: 12.8,
-    target: [0, -0.35, 0],
+    azimuth: 1.22,
+    elevation: 0.16,
+    distance: 12.4,
+    target: [0.55, 0.12, 0],
   },
-  timelineDurationMs: 22000,
+  timelineDurationMs: 24000,
+};
+
+const createBackgroundField = (): BackgroundDotField => {
+  const positions = new Float32Array(BACKGROUND_DOT_COUNT * 3);
+  const basePositions = new Float32Array(BACKGROUND_DOT_COUNT * 3);
+  const colors = new Float32Array(BACKGROUND_DOT_COUNT * 3);
+  const seeds = new Float32Array(BACKGROUND_DOT_COUNT);
+  const color = new Color();
+
+  for (let index = 0; index < BACKGROUND_DOT_COUNT; index += 1) {
+    const x = mix(-16.5, 16.5, hash(index + 1));
+    const y = mix(-9.2, 9.4, hash(index + 17));
+    const z = mix(-2.2, 2.2, hash(index + 29));
+    const brightness = 0.09 + hash(index + 41) * 0.16;
+
+    positions[index * 3] = x;
+    positions[index * 3 + 1] = y;
+    positions[index * 3 + 2] = z;
+    basePositions[index * 3] = x;
+    basePositions[index * 3 + 1] = y;
+    basePositions[index * 3 + 2] = z;
+    seeds[index] = hash(index + 59);
+
+    color.setRGB(
+      brightness * 1.03,
+      brightness,
+      Math.max(0.12, brightness * 0.84),
+    );
+    colors[index * 3] = color.r;
+    colors[index * 3 + 1] = color.g;
+    colors[index * 3 + 2] = color.b;
+  }
+
+  return { positions, basePositions, colors, seeds };
+};
+
+const createAccretionField = (
+  count: number,
+  radiusRange: [number, number],
+  speedRange: [number, number],
+  colorStops: {
+    r: [number, number];
+    g: [number, number];
+    b: [number, number];
+  },
+): AccretionDotField => {
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const angles = new Float32Array(count);
+  const radii = new Float32Array(count);
+  const speeds = new Float32Array(count);
+  const offsets = new Float32Array(count);
+  const color = new Color();
+
+  for (let index = 0; index < count; index += 1) {
+    const colorMix = hash(index + 127);
+    angles[index] = hash(index + 71) * TAU;
+    radii[index] = mix(radiusRange[0], radiusRange[1], hash(index + 83));
+    speeds[index] = mix(speedRange[0], speedRange[1], hash(index + 97));
+    offsets[index] = hash(index + 111);
+
+    color.setRGB(
+      mix(colorStops.r[0], colorStops.r[1], colorMix),
+      mix(colorStops.g[0], colorStops.g[1], colorMix),
+      mix(colorStops.b[0], colorStops.b[1], colorMix),
+    );
+    colors[index * 3] = color.r;
+    colors[index * 3 + 1] = color.g;
+    colors[index * 3 + 2] = color.b;
+  }
+
+  return { positions, colors, angles, radii, speeds, offsets };
+};
+
+const createHorizonField = (): HorizonDotField => {
+  const positions = new Float32Array(HORIZON_DOT_COUNT * 3);
+  const colors = new Float32Array(HORIZON_DOT_COUNT * 3);
+  const angles = new Float32Array(HORIZON_DOT_COUNT);
+  const speeds = new Float32Array(HORIZON_DOT_COUNT);
+  const offsets = new Float32Array(HORIZON_DOT_COUNT);
+  const color = new Color();
+
+  for (let index = 0; index < HORIZON_DOT_COUNT; index += 1) {
+    const arcMix = index / HORIZON_DOT_COUNT;
+    angles[index] = mix(0, TAU, arcMix);
+    speeds[index] = 0.36 + hash(index + 149) * 0.34;
+    offsets[index] = hash(index + 163);
+
+    const brightness = 0.78 + hash(index + 179) * 0.16;
+    color.setRGB(brightness, brightness * 0.72, brightness * 0.34);
+    colors[index * 3] = color.r;
+    colors[index * 3 + 1] = color.g;
+    colors[index * 3 + 2] = color.b;
+  }
+
+  return { positions, colors, angles, speeds, offsets };
 };
 
 const BlackHoleScene: ImplementationDefinition["Scene"] = ({
@@ -160,15 +272,66 @@ const BlackHoleScene: ImplementationDefinition["Scene"] = ({
 }) => {
   void sheet;
   const [{ phase }, phaseApi] = useSpring(() => ({ phase: 0 }));
-  const [activeStage, setActiveStage] = useState(0);
   const activeStageRef = useRef(0);
-  const gridRef = useRef<Mesh>(null);
-  const diskRef = useRef<Mesh>(null);
-  const ringRef = useRef<Mesh>(null);
-  const horizonRingRef = useRef<Mesh>(null);
-  const curvatureBandRefs = useRef<Array<Mesh | null>>([]);
-  const particleRefs = useRef<Array<Mesh | null>>([]);
-  const baseGridPositionsRef = useRef<Float32Array | null>(null);
+  const backgroundPointsRef = useRef<Points>(null);
+  const midplaneBackPointsRef = useRef<Points>(null);
+  const midplaneFrontPointsRef = useRef<Points>(null);
+  const upperLensPointsRef = useRef<Points>(null);
+  const lowerLensPointsRef = useRef<Points>(null);
+  const horizonPointsRef = useRef<Points>(null);
+  const haloRingRef = useRef<Mesh>(null);
+  const backgroundField = useMemo(createBackgroundField, []);
+  const midplaneField = useMemo(
+    () =>
+      createAccretionField(
+        MIDPLANE_DOT_COUNT,
+        [2.05, 7.6],
+        [0.44, 0.74],
+        {
+          r: [0.9, 1],
+          g: [0.78, 0.98],
+          b: [0.86, 1],
+        },
+      ),
+    [],
+  );
+  const upperLensField = useMemo(
+    () =>
+      createAccretionField(
+        UPPER_LENS_DOT_COUNT,
+        [2.2, 5.9],
+        [0.18, 0.34],
+        {
+          r: [0.92, 1],
+          g: [0.84, 0.98],
+          b: [0.9, 1],
+        },
+      ),
+    [],
+  );
+  const lowerLensField = useMemo(
+    () =>
+      createAccretionField(
+        LOWER_LENS_DOT_COUNT,
+        [1.95, 4.7],
+        [0.14, 0.28],
+        {
+          r: [0.84, 0.98],
+          g: [0.72, 0.92],
+          b: [0.8, 0.96],
+        },
+      ),
+    [],
+  );
+  const horizonField = useMemo(createHorizonField, []);
+  const midplaneBackPositions = useMemo(
+    () => new Float32Array(MIDPLANE_DOT_COUNT * 3),
+    [],
+  );
+  const midplaneFrontPositions = useMemo(
+    () => new Float32Array(MIDPLANE_DOT_COUNT * 3),
+    [],
+  );
   const maxStageIndex = Math.max(0, blackHoleConfig.metadata.stages.length - 1);
 
   useEffect(() => {
@@ -217,12 +380,12 @@ const BlackHoleScene: ImplementationDefinition["Scene"] = ({
       typeof zoomLevel === "number" && Number.isFinite(zoomLevel)
         ? Math.max(0.5, zoomLevel)
         : 1;
+
     if (!manualCamera) {
       const target = new Vector3(...blackHoleConfig.camera.target);
       const distance = blackHoleConfig.camera.distance / safeZoom;
       const azimuth = blackHoleConfig.camera.azimuth;
       const elevation = blackHoleConfig.camera.elevation;
-
       state.camera.position.set(
         Math.cos(azimuth) * Math.cos(elevation) * distance,
         Math.sin(elevation) * distance,
@@ -234,290 +397,353 @@ const BlackHoleScene: ImplementationDefinition["Scene"] = ({
     const stage = Math.min(maxStageIndex, Math.max(0, Math.floor(currentPhase)));
     if (stage !== activeStageRef.current) {
       activeStageRef.current = stage;
-      setActiveStage(stage);
       onStageChange?.(stage);
     }
 
-    const diskMesh = diskRef.current;
-    if (diskMesh) {
-      diskMesh.rotation.z +=
-        delta * (0.34 + smoothWindow(currentPhase, 2, 5) * 0.22);
+    const shadowMix = smoothWindow(currentPhase, 0.2, 1.2);
+    const midplaneMix = smoothWindow(currentPhase, 1, 2.2);
+    const upperLensMix = smoothWindow(currentPhase, 2.1, 3.4);
+    const lowerLensMix = smoothWindow(currentPhase, 3, 4.1);
+    const horizonMix = smoothWindow(currentPhase, 3.8, 5);
+
+    const backgroundPosition = backgroundPointsRef.current?.geometry.getAttribute(
+      "position",
+    );
+    if (backgroundPosition instanceof BufferAttribute) {
+      for (let index = 0; index < BACKGROUND_DOT_COUNT; index += 1) {
+        const offset = index * 3;
+        const baseX = backgroundField.basePositions[offset];
+        const baseY = backgroundField.basePositions[offset + 1];
+        const baseZ = backgroundField.basePositions[offset + 2];
+        const seed = backgroundField.seeds[index];
+        const dx = baseX - HOLE_X;
+        const dy = baseY - HOLE_Y;
+        const radius = Math.sqrt(dx * dx + dy * dy) + 0.22;
+        const angle = Math.atan2(dy, dx);
+        const lens =
+          shadowMix * Math.exp(-Math.pow((radius - 2.95) * 0.45, 2)) * 0.58 +
+          horizonMix * Math.exp(-Math.pow((radius - 1.9) * 1.18, 2)) * 0.28;
+        const warpedAngle =
+          angle + lens * (0.2 + Math.sin(elapsed * 0.4 + seed * 7) * 0.08);
+        const warpedRadius = Math.max(HORIZON_RADIUS + 0.1, radius - lens * 0.06);
+        const twinkleX = Math.sin(elapsed * 0.42 + seed * 14) * 0.02;
+        const twinkleY = Math.cos(elapsed * 0.33 + seed * 10) * 0.02;
+
+        backgroundPosition.setXYZ(
+          index,
+          Math.cos(warpedAngle) * warpedRadius + HOLE_X + twinkleX,
+          Math.sin(warpedAngle) * warpedRadius + HOLE_Y + twinkleY,
+          baseZ + lens * 0.12,
+        );
+      }
+      backgroundPosition.needsUpdate = true;
     }
 
-    const ringMesh = ringRef.current;
-    if (ringMesh) {
-      ringMesh.rotation.z -= delta * 0.14;
-    }
+    const midplaneBackPosition = midplaneBackPointsRef.current?.geometry.getAttribute(
+      "position",
+    );
+    const midplaneFrontPosition = midplaneFrontPointsRef.current?.geometry.getAttribute(
+      "position",
+    );
+    if (
+      midplaneBackPosition instanceof BufferAttribute &&
+      midplaneFrontPosition instanceof BufferAttribute
+    ) {
+      for (let index = 0; index < MIDPLANE_DOT_COUNT; index += 1) {
+        const angle =
+          midplaneField.angles[index] - elapsed * midplaneField.speeds[index];
+        const radius = midplaneField.radii[index];
+        const offset = midplaneField.offsets[index] - 0.5;
+        const radialBias = 1 - Math.exp(-Math.pow((radius - 2.8) * 0.34, 2));
+        const xScale = 1.82 - Math.exp(-Math.pow((radius - 2.25) * 1.3, 2)) * 0.4;
+        const diskThickness = 0.025 + radialBias * 0.085;
+        const x = HOLE_X + Math.cos(angle) * radius * xScale;
+        const y =
+          HOLE_Y +
+          offset * diskThickness +
+          Math.sin(angle * 2.4 + offset * 6) * 0.012 * midplaneMix;
+        const z = Math.sin(angle) * radius * 0.78 + offset * 0.42;
+        const isFront = z >= 0;
 
-    const horizonRingMesh = horizonRingRef.current;
-    if (horizonRingMesh) {
-      horizonRingMesh.rotation.z += delta * 0.48;
-    }
-
-    const gridMesh = gridRef.current;
-    if (gridMesh) {
-      const position = gridMesh.geometry.getAttribute("position");
-      if (position instanceof BufferAttribute) {
-        if (!baseGridPositionsRef.current) {
-          baseGridPositionsRef.current = Float32Array.from(
-            position.array as ArrayLike<number>,
-          );
+        if (isFront) {
+          midplaneFrontPosition.setXYZ(index, x, y, z);
+          midplaneBackPosition.setXYZ(index, x, y, -400);
+        } else {
+          midplaneBackPosition.setXYZ(index, x, y, z);
+          midplaneFrontPosition.setXYZ(index, x, y, -400);
         }
-
-        const base = baseGridPositionsRef.current;
-        const warpStrength =
-          0.18 +
-          smoothWindow(currentPhase, 1, 2.3) * 1.45 +
-          smoothWindow(currentPhase, 3.6, 5) * 0.72;
-        const rippleAmplitude =
-          0.012 + smoothWindow(currentPhase, 2.1, 5) * 0.05;
-        const infallMix = smoothWindow(currentPhase, 4, 5);
-        const horizonRadius = 1.35;
-
-        for (let vertexIndex = 0; vertexIndex < position.count; vertexIndex += 1) {
-          const offset = vertexIndex * 3;
-          const baseX = base[offset];
-          const baseY = base[offset + 1];
-          const radius = Math.sqrt(baseX * baseX + baseY * baseY) + 0.45;
-          const angle = Math.atan2(baseY, baseX);
-          const horizonProximity = Math.exp(
-            -Math.pow((radius - horizonRadius) * 1.65, 2),
-          );
-
-          const wellDepth = -Math.min(
-            3.45,
-            (warpStrength / radius) * 0.78 +
-              horizonProximity * (0.22 + infallMix * 0.4),
-          );
-          const ripple =
-            (Math.sin(radius * 2.3 - elapsed * 2) * rippleAmplitude) /
-            (1 + radius * 0.75);
-          const swirl =
-            Math.sin((angle + elapsed * 0.5) * 3) *
-            (0.03 + horizonProximity * 0.04) *
-            infallMix;
-
-          position.setZ(vertexIndex, wellDepth + ripple + swirl);
-        }
-
-        position.needsUpdate = true;
       }
+      midplaneBackPosition.needsUpdate = true;
+      midplaneFrontPosition.needsUpdate = true;
     }
 
-    const curvatureMix =
-      smoothWindow(currentPhase, 1, 2.5) + smoothWindow(currentPhase, 3.8, 5) * 0.55;
-    CURVATURE_BANDS.forEach((spec, index) => {
-      const mesh = curvatureBandRefs.current[index];
-      if (!mesh) {
-        return;
+    const upperLensPosition = upperLensPointsRef.current?.geometry.getAttribute(
+      "position",
+    );
+    if (upperLensPosition instanceof BufferAttribute) {
+      for (let index = 0; index < UPPER_LENS_DOT_COUNT; index += 1) {
+        const angle =
+          upperLensField.angles[index] - elapsed * upperLensField.speeds[index];
+        const radius = upperLensField.radii[index];
+        const offset = upperLensField.offsets[index] - 0.5;
+        const arch = Math.pow(Math.abs(Math.sin(angle)), 0.66);
+        const lift =
+          0.04 +
+          upperLensMix * (0.16 + arch * (1.54 + (radius - 2.2) * 0.26));
+        upperLensPosition.setXYZ(
+          index,
+          HOLE_X + Math.cos(angle) * radius * (1.08 + upperLensMix * 0.16),
+          HOLE_Y + lift + offset * (0.05 + arch * 0.06),
+          -0.18 + Math.sin(angle) * radius * 0.34 + offset * 0.14,
+        );
       }
-      const depthBias = (CURVATURE_BANDS.length - index) * 0.03;
-      mesh.position.y = spec.baseY - curvatureMix * (0.2 + depthBias);
-      mesh.scale.setScalar(1 - curvatureMix * 0.035);
-    });
+      upperLensPosition.needsUpdate = true;
+    }
 
-    const infallMix = smoothWindow(currentPhase, 4.1, 5);
-    ORBITER_SPECS.forEach((spec, index) => {
-      const particle = particleRefs.current[index];
-      if (!particle) {
-        return;
+    const lowerLensPosition = lowerLensPointsRef.current?.geometry.getAttribute(
+      "position",
+    );
+    if (lowerLensPosition instanceof BufferAttribute) {
+      for (let index = 0; index < LOWER_LENS_DOT_COUNT; index += 1) {
+        const angle =
+          lowerLensField.angles[index] - elapsed * lowerLensField.speeds[index];
+        const radius = lowerLensField.radii[index];
+        const offset = lowerLensField.offsets[index] - 0.5;
+        const arch = Math.pow(Math.abs(Math.sin(angle)), 0.72);
+        const drop =
+          0.02 +
+          lowerLensMix * (0.08 + arch * (0.86 + (radius - 1.95) * 0.18));
+        lowerLensPosition.setXYZ(
+          index,
+          HOLE_X + Math.cos(angle) * radius * (0.96 + lowerLensMix * 0.08),
+          HOLE_Y - drop + offset * (0.03 + arch * 0.04),
+          -0.28 + Math.sin(angle) * radius * 0.22 + offset * 0.12,
+        );
       }
-      const theta = elapsed * spec.speed + spec.offset;
-      const inwardPull = infallMix * (elapsed * 0.085 + spec.infallBias);
-      const radius = Math.max(1.45, spec.radius - inwardPull);
-      const x = Math.cos(theta) * radius;
-      const z = Math.sin(theta) * radius * 0.72;
-      const y = -0.16 + Math.sin(theta * 2 + spec.offset) * 0.14;
-      particle.position.set(x, y, z);
-      particle.scale.setScalar(0.85 + infallMix * 0.35);
-    });
+      lowerLensPosition.needsUpdate = true;
+    }
+
+    const horizonPosition = horizonPointsRef.current?.geometry.getAttribute("position");
+    if (horizonPosition instanceof BufferAttribute) {
+      for (let index = 0; index < HORIZON_DOT_COUNT; index += 1) {
+        const angleBase = horizonField.angles[index];
+        const speed = horizonField.speeds[index];
+        const offset = horizonField.offsets[index];
+        const orbitAngle = angleBase + elapsed * speed * (0.22 + horizonMix * 0.44);
+        const radius =
+          HORIZON_RADIUS +
+          Math.sin(elapsed * 1.2 + offset * TAU) * (0.006 + horizonMix * 0.014);
+        const ellipseYScale = 0.99;
+        const frontBias = 0.018 + Math.sin(orbitAngle * 2 + offset * 8) * 0.008;
+
+        horizonPosition.setXYZ(
+          index,
+          HOLE_X + Math.cos(orbitAngle) * radius,
+          HOLE_Y + Math.sin(orbitAngle) * radius * ellipseYScale,
+          0.19 + Math.sin(orbitAngle) * frontBias,
+        );
+      }
+      horizonPosition.needsUpdate = true;
+    }
+
+    const haloRing = haloRingRef.current;
+    if (haloRing) {
+      haloRing.rotation.z += delta * (0.06 + horizonMix * 0.08);
+      haloRing.scale.setScalar(
+        1 + horizonMix * 0.02 + Math.sin(elapsed * 1.15) * 0.004,
+      );
+    }
   });
 
-  const gridOpacity = phase.to(
-    (value) => 0.25 + smoothWindow(value, 0.6, 2.1) * 0.38,
+  const backgroundOpacity = phase.to(
+    (value) => 0.14 + smoothWindow(value, 0.1, 1.4) * 0.6,
   );
-  const diskOpacity = phase.to(
-    (value) => 0.15 + smoothWindow(value, 1.5, 3.3) * 0.72,
+  const midplaneOpacity = phase.to(
+    (value) => 0.02 + smoothWindow(value, 0.9, 2.2) * 0.98,
   );
-  const particleOpacity = phase.to((value) => smoothWindow(value, 2.2, 5));
-  const glowOpacity = phase.to(
-    (value) => 0.2 + smoothWindow(value, 3.2, 5) * 0.7,
+  const upperLensOpacity = phase.to(
+    (value) => 0.01 + smoothWindow(value, 2, 3.4) * 0.94,
+  );
+  const lowerLensOpacity = phase.to(
+    (value) => 0.01 + smoothWindow(value, 3, 4.2) * 0.72,
   );
   const horizonOpacity = phase.to(
-    (value) => 0.12 + smoothWindow(value, 1.8, 4.8) * 0.66,
+    (value) => 0.01 + smoothWindow(value, 3.6, 4.8) * 0.78,
   );
-  const curvatureBandOpacity = phase.to(
-    (value) => 0.12 + smoothWindow(value, 1, 3.5) * 0.45,
+  const haloOpacity = phase.to(
+    (value) => 0.02 + smoothWindow(value, 1.1, 4.2) * 0.28,
   );
 
   return (
     <group>
       <SceneLabel
-        position={[0, 4.7, 0]}
-        text={blackHoleConfig.metadata.stages[activeStage]?.sceneLabel ?? ""}
-        size={17}
-      />
-      <SceneLabel
-        position={[-6.5, 2.6, 0]}
-        text="Warped spacetime grid"
-        size={13}
-        color="#2f6fb3"
-        align="left"
-      />
-      <SceneLabel
-        position={[5.5, 2, 0]}
-        text="Orbiting matter tracers"
-        size={13}
-        color="#8a6610"
-        align="left"
-      />
-      <SceneLabel
-        position={[5.8, 1.35, 0]}
-        text="Trails show path bending and infall"
+        position={[-6.1, -3.9, 0]}
+        text="Bright bands are the accretion disk; the tight dotted rim marks the horizon"
         size={12}
-        color="#7f6f3d"
+        color="#d8c8a0"
         align="left"
-      />
-      <SceneLabel
-        position={[2.65, 1.15, 0]}
-        text="Event horizon boundary"
-        size={13}
-        color="#b55a28"
-      />
-      <SceneLabel
-        position={[-6.7, -0.1, 0]}
-        text="Curvature contours steepen toward horizon"
-        size={12}
-        color="#2b5f93"
-        align="left"
-      />
-      <SceneLabel
-        position={[0, -4.9, 0]}
-        text="Gravity well depth increases as radius decreases"
-        size={13}
-        color="#7a4f62"
       />
 
-      <mesh ref={gridRef} rotation-x={-Math.PI / 2} position={[0, -1.15, 0]}>
-        <planeGeometry args={[18, 18, 60, 60]} />
-        <a.meshStandardMaterial
-          color="#d6e4f8"
-          wireframe
-          transparent
-          opacity={gridOpacity}
-        />
+      <mesh position={[0, 0, -1.2]}>
+        <planeGeometry args={[24, 13]} />
+        <meshBasicMaterial color="#030204" />
       </mesh>
 
-      <a.mesh ref={diskRef} rotation-x={Math.PI / 2} position={[0, -0.18, 0]}>
-        <torusGeometry args={[3.25, 0.52, 26, 120]} />
-        <a.meshStandardMaterial
-          color="#ea9b5f"
-          emissive="#f2a46b"
-          emissiveIntensity={diskOpacity.to((value) => 0.25 + value * 0.8)}
+      <a.mesh
+        ref={haloRingRef}
+        position={[HOLE_X, HOLE_Y, -0.06]}
+        renderOrder={2}
+      >
+        <ringGeometry args={[HORIZON_RADIUS * 1.12, HORIZON_RADIUS * 1.45, 96]} />
+        <a.meshBasicMaterial
+          color="#f6d4df"
           transparent
-          opacity={diskOpacity}
-          roughness={0.4}
-          metalness={0.06}
+          opacity={haloOpacity.to((value) => value * 0.42)}
         />
       </a.mesh>
 
-      <a.mesh rotation-x={Math.PI / 2} position={[0, -0.16, 0]}>
-        <torusGeometry args={[2.2, 0.24, 20, 90]} />
-        <a.meshStandardMaterial
-          color="#f6c189"
-          transparent
-          opacity={diskOpacity.to((value) => Math.min(0.92, value * 0.82))}
-          roughness={0.45}
-          metalness={0.04}
-        />
-      </a.mesh>
-
-      {CURVATURE_BANDS.map((spec, index) => (
-        <a.mesh
-          key={`curvature-band-${index}`}
-          ref={(mesh) => {
-            curvatureBandRefs.current[index] = mesh;
-          }}
-          rotation-x={Math.PI / 2}
-          position={[0, spec.baseY, 0]}
-        >
-          <torusGeometry args={[spec.radius, spec.tube, 18, 128]} />
-          <a.meshBasicMaterial
-            color={spec.color}
-            transparent
-            opacity={curvatureBandOpacity}
+      <points ref={backgroundPointsRef} frustumCulled={false}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[backgroundField.positions, 3]}
           />
-        </a.mesh>
-      ))}
+          <bufferAttribute
+            attach="attributes-color"
+            args={[backgroundField.colors, 3]}
+          />
+        </bufferGeometry>
+        <a.pointsMaterial
+          size={0.038}
+          sizeAttenuation
+          transparent
+          depthWrite={false}
+          vertexColors
+          opacity={backgroundOpacity}
+        />
+      </points>
 
-      <a.mesh position={[0, 0, 0]}>
-        <sphereGeometry args={[1.05, 48, 48]} />
-        <a.meshStandardMaterial
-          color="#06090f"
-          emissive="#121b28"
-          emissiveIntensity={glowOpacity.to((value) => 0.1 + value * 0.42)}
-          roughness={0.25}
-          metalness={0.28}
+      <points ref={upperLensPointsRef} frustumCulled={false} renderOrder={1}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[upperLensField.positions, 3]}
+          />
+          <bufferAttribute
+            attach="attributes-color"
+            args={[upperLensField.colors, 3]}
+          />
+        </bufferGeometry>
+        <a.pointsMaterial
+          size={0.08}
+          sizeAttenuation
+          transparent
+          depthWrite={false}
+          blending={AdditiveBlending}
+          vertexColors
+          opacity={upperLensOpacity}
+        />
+      </points>
+
+      <points ref={midplaneBackPointsRef} frustumCulled={false} renderOrder={2}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[midplaneBackPositions, 3]}
+          />
+          <bufferAttribute
+            attach="attributes-color"
+            args={[midplaneField.colors, 3]}
+          />
+        </bufferGeometry>
+        <a.pointsMaterial
+          size={0.074}
+          sizeAttenuation
+          transparent
+          depthWrite={false}
+          blending={AdditiveBlending}
+          vertexColors
+          opacity={midplaneOpacity}
+        />
+      </points>
+
+      <points ref={lowerLensPointsRef} frustumCulled={false} renderOrder={1}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[lowerLensField.positions, 3]}
+          />
+          <bufferAttribute
+            attach="attributes-color"
+            args={[lowerLensField.colors, 3]}
+          />
+        </bufferGeometry>
+        <a.pointsMaterial
+          size={0.066}
+          sizeAttenuation
+          transparent
+          depthWrite={false}
+          blending={AdditiveBlending}
+          vertexColors
+          opacity={lowerLensOpacity}
+        />
+      </points>
+
+      <a.mesh position={[HOLE_X, HOLE_Y, 0.04]} renderOrder={4}>
+        <circleGeometry args={[HORIZON_RADIUS * 1.01, 96]} />
+        <a.meshBasicMaterial
+          color="#050403"
+          transparent
+          opacity={0.995}
+          depthWrite={false}
+          depthTest={false}
         />
       </a.mesh>
 
-      <a.mesh position={[0, 0, 0]}>
-        <sphereGeometry args={[1.34, 40, 40]} />
-        <a.meshStandardMaterial
-          color="#d66b37"
-          emissive="#f39355"
-          emissiveIntensity={horizonOpacity.to((value) => 0.15 + value * 0.7)}
+      <points ref={midplaneFrontPointsRef} frustumCulled={false} renderOrder={5}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[midplaneFrontPositions, 3]}
+          />
+          <bufferAttribute
+            attach="attributes-color"
+            args={[midplaneField.colors, 3]}
+          />
+        </bufferGeometry>
+        <a.pointsMaterial
+          size={0.074}
+          sizeAttenuation
           transparent
+          depthWrite={false}
+          depthTest={false}
+          blending={AdditiveBlending}
+          vertexColors
+          opacity={midplaneOpacity}
+        />
+      </points>
+
+      <points ref={horizonPointsRef} frustumCulled={false} renderOrder={6}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[horizonField.positions, 3]}
+          />
+          <bufferAttribute
+            attach="attributes-color"
+            args={[horizonField.colors, 3]}
+          />
+        </bufferGeometry>
+        <a.pointsMaterial
+          size={0.068}
+          sizeAttenuation
+          transparent
+          depthWrite={false}
+          blending={AdditiveBlending}
+          vertexColors
           opacity={horizonOpacity}
-          roughness={0.33}
-          metalness={0.05}
         />
-      </a.mesh>
-
-      <a.mesh ref={ringRef} rotation-x={Math.PI / 2} position={[0, 0, 0]}>
-        <torusGeometry args={[1.33, 0.06, 18, 96]} />
-        <a.meshBasicMaterial
-          color="#2c394e"
-          transparent
-          opacity={glowOpacity.to((value) => 0.18 + value * 0.58)}
-        />
-      </a.mesh>
-
-      <a.mesh ref={horizonRingRef} rotation-x={Math.PI / 2} position={[0, 0, 0]}>
-        <torusGeometry args={[1.68, 0.045, 16, 120]} />
-        <a.meshBasicMaterial
-          color="#f39d5d"
-          transparent
-          opacity={horizonOpacity.to((value) => 0.15 + value * 0.7)}
-        />
-      </a.mesh>
-
-      {ORBITER_SPECS.map((spec, index) => (
-        <Trail
-          key={`orbiter-trail-${index}`}
-          width={0.18}
-          length={7.2}
-          decay={1.35}
-          interval={1}
-          color={spec.color}
-          attenuation={(width) => width * width}
-        >
-          <a.mesh
-            ref={(mesh) => {
-              particleRefs.current[index] = mesh;
-            }}
-          >
-            <sphereGeometry args={[0.14, 16, 16]} />
-            <a.meshStandardMaterial
-              color={spec.color}
-              emissive={spec.color}
-              emissiveIntensity={0.28}
-              transparent
-              opacity={particleOpacity.to((value) => 0.24 + value * 0.74)}
-            />
-          </a.mesh>
-        </Trail>
-      ))}
+      </points>
     </group>
   );
 };
